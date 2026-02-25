@@ -80,7 +80,7 @@ fan:
     id: zehnder_fan
     name: "Ventilatie"
     nrf905: nrf905_rf
-    update_interval: 10s   # tijdelijk voor debug
+    update_interval: 60s   
     setup_priority: -100
 
 # ------------ Button -------------
