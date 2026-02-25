@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import pins
-from esphome.components import fan, spi
+from esphome.components import spi
 from esphome.const import CONF_ID
 
 CONF_AM_PIN = "am_pin"
@@ -14,7 +14,7 @@ CONF_TXEN_PIN = "txen_pin"
 DEPENDENCIES = ["spi"]
 
 nrf905_ns = cg.esphome_ns.namespace("nrf905")
-nRF905Component = nrf905_ns.class_("nRF905", fan.FanState)
+nRF905Component = nrf905_ns.class_("nRF905", cg.Component, spi.SPIDevice)
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -41,15 +41,20 @@ async def to_code(config):
     if CONF_AM_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_AM_PIN])
         cg.add(var.set_am_pin(data))
+
     if CONF_CD_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_CD_PIN])
         cg.add(var.set_cd_pin(data))
+
     data = await cg.gpio_pin_expression(config[CONF_CE_PIN])
     cg.add(var.set_ce_pin(data))
+
     if CONF_DR_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_DR_PIN])
         cg.add(var.set_dr_pin(data))
+
     data = await cg.gpio_pin_expression(config[CONF_PWR_PIN])
     cg.add(var.set_pwr_pin(data))
+
     data = await cg.gpio_pin_expression(config[CONF_TXEN_PIN])
     cg.add(var.set_txen_pin(data))
