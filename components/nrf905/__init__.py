@@ -41,20 +41,15 @@ async def to_code(config):
     if CONF_AM_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_AM_PIN])
         cg.add(var.set_am_pin(data))
-
     if CONF_CD_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_CD_PIN])
         cg.add(var.set_cd_pin(data))
-
     data = await cg.gpio_pin_expression(config[CONF_CE_PIN])
     cg.add(var.set_ce_pin(data))
-
     if CONF_DR_PIN in config:
         data = await cg.gpio_pin_expression(config[CONF_DR_PIN])
         cg.add(var.set_dr_pin(data))
-
     data = await cg.gpio_pin_expression(config[CONF_PWR_PIN])
     cg.add(var.set_pwr_pin(data))
-
     data = await cg.gpio_pin_expression(config[CONF_TXEN_PIN])
     cg.add(var.set_txen_pin(data))
