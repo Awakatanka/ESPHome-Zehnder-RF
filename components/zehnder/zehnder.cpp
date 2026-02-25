@@ -649,5 +649,6 @@ void ZehnderRF::rfHandler(void) {
   }
 }
 
+
 }  // namespace zehnder
 }  // namespace esphome
