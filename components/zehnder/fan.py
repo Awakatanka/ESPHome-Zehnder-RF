@@ -9,13 +9,15 @@ from esphome.components.nrf905 import nRF905Component
 DEPENDENCIES = ["nrf905"]
 
 zehnder_ns = cg.esphome_ns.namespace("zehnder")
-ZehnderRF = zehnder_ns.class_("ZehnderRF", fan.Fan, cg.Component)
+ZehnderRF = zehnder_ns.class_("ZehnderRF", cg.Component, fan.Fan)
 
 CONF_NRF905 = "nrf905"
 
-CONFIG_SCHEMA = fan.fan_schema(ZehnderRF).extend(
+CONFIG_SCHEMA = fan.fan_schema(
+    ZehnderRF,
+    default_restore_mode="RESTORE_DEFAULT_OFF",
+).extend(
     {
-        cv.GenerateID(): cv.declare_id(ZehnderRF),
         cv.Required(CONF_NRF905): cv.use_id(nRF905Component),
         cv.Optional(CONF_UPDATE_INTERVAL, default="30s"): cv.update_interval,
     }
