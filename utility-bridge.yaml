@@ -84,6 +84,7 @@ fan:
     setup_priority: -100
 
 # ------------ Button -------------
+# ---- zehnder_fan->setSpeed(3, 10) 3=speed and 10 is time ------
 
 button:
   - platform: restart
@@ -91,13 +92,13 @@ button:
     name: ${upper_devicename} herstart
 
   - platform: template
-    id: ${devicename}_high
-    name: ${upper_devicename} High
+    id: ${devicename}_low
+    name: ${upper_devicename} Low
     on_press:
       then:
         lambda: |-
-          zehnder_fan->setSpeed(3, 0);
-
+          zehnder_fan->setSpeed(1, 0);
+          
   - platform: template
     id: ${devicename}_medium
     name: ${upper_devicename} Medium
@@ -107,13 +108,13 @@ button:
           zehnder_fan->setSpeed(2, 0);
 
   - platform: template
-    id: ${devicename}_low
-    name: ${upper_devicename} Low
+    id: ${devicename}_high
+    name: ${upper_devicename} High
     on_press:
       then:
         lambda: |-
-          zehnder_fan->setSpeed(1, 0);
-
+          zehnder_fan->setSpeed(3, 0);
+  
   - platform: factory_reset
     id: ${devicename}_reset_pairing
     name: ${upper_devicename} Reset & Pair
