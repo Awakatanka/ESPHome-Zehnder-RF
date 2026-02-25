@@ -1,4 +1,4 @@
-#include "zehnder.h"
+#include "zehnder.h
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 
