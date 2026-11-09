@@ -70,17 +70,9 @@ void ZehnderRF::control(const fan::FanCall &call) {
     ESP_LOGD(TAG, "Control has speed: %u", this->speed);
   }
 
-  switch (this->state_) {
-    case StateIdle:
-      // Set speed
-      this->setSpeed(this->state ? this->speed : 0x00, 0);
-
-      this->lastFanQuery_ = millis();  // Update time
-      break;
-
-    default:
-      break;
-  }
+  // setSpeed() verstuurt direct als de component idle is en zet de opdracht
+  // anders in de wachtrij (newSetting), zodat er geen opdrachten verloren gaan.
+  this->setSpeed(this->state ? this->speed : 0x00, 0);
 
   this->publish_state();
 }
@@ -95,6 +87,8 @@ void ZehnderRF::setup() {
   this->pref_ = global_preferences->make_preference<Config>(hash, true);
   if (this->pref_.load(&this->config_)) {
     ESP_LOGD(TAG, "Config load ok");
+  } else {
+    ESP_LOGW(TAG, "No stored pairing config found (first boot or storage reset), pairing will start");
   }
 
   // Set nRF905 config
@@ -213,6 +207,7 @@ void ZehnderRF::loop(void) {
         // When done, return to idle
         this->state_ = StateIdle;
       }
+      break;
 
     default:
       break;
@@ -332,7 +327,10 @@ void ZehnderRF::rfHandleReceived(const uint8_t *const pData, const uint8_t dataL
             this->rfComplete();
 
             ESP_LOGD(TAG, "Saving pairing config");
-            this->pref_.save(&this->config_);
+            if (!this->pref_.save(&this->config_)) {
+              ESP_LOGE(TAG, "Saving pairing config failed");
+            }
+            global_preferences->sync();  // direct naar flash schrijven
 
             this->state_ = StateIdle;
           } else {
@@ -385,8 +383,6 @@ void ZehnderRF::rfHandleReceived(const uint8_t *const pData, const uint8_t dataL
             ESP_LOGD(TAG, "Received fan settings; speed: 0x%02X voltage: %i timer: %i",
                      pResponse->payload.fanSettings.speed, pResponse->payload.fanSettings.voltage,
                      pResponse->payload.fanSettings.timer);
-            this->rfComplete();
-
             this->rfComplete();
 
             (void) memset(this->_txFrame, 0, FAN_FRAMESIZE);  // Clear frame data
@@ -456,6 +452,11 @@ uint8_t ZehnderRF::createDeviceID(void) {
 void ZehnderRF::queryDevice(void) {
   RfFrame *const pFrame = (RfFrame *) this->_txFrame;  // frame helper
 
+  if (this->rfState_ != RfStateIdle) {
+    ESP_LOGD(TAG, "Query skipped, RF busy");
+    return;
+  }
+
   ESP_LOGD(TAG, "Query device");
 
   this->lastFanQuery_ = millis();  // Update time
@@ -472,12 +473,12 @@ void ZehnderRF::queryDevice(void) {
   pFrame->command = FAN_TYPE_QUERY_DEVICE;
   pFrame->parameter_count = 0x00;  // No parameters
 
-  this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
-    ESP_LOGW(TAG, "Query Timeout");
-    this->state_ = StateIdle;
-  });
-
-  this->state_ = StateWaitQueryResponse;
+  if (this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
+        ESP_LOGW(TAG, "Query Timeout");
+        this->state_ = StateIdle;
+      }) == ResultOk) {
+    this->state_ = StateWaitQueryResponse;
+  }
 }
 
 void ZehnderRF::setSpeed(const uint8_t paramSpeed, const uint8_t paramTimer) {
@@ -513,13 +514,19 @@ void ZehnderRF::setSpeed(const uint8_t paramSpeed, const uint8_t paramTimer) {
       pFrame->payload.setTimer.timer = timer;
     }
 
-    this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
-      ESP_LOGW(TAG, "Set speed timeout");
-      this->state_ = StateIdle;
-    });
-
-    newSetting = false;
-    this->state_ = StateWaitSetSpeedResponse;
+    if (this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
+          ESP_LOGW(TAG, "Set speed timeout");
+          this->state_ = StateIdle;
+        }) == ResultOk) {
+      newSetting = false;
+      this->lastFanQuery_ = millis();
+      this->state_ = StateWaitSetSpeedResponse;
+    } else {
+      ESP_LOGD(TAG, "RF busy, I'm trying later again");
+      newSpeed = speed;
+      newTimer = timer;
+      newSetting = true;
+    }
   } else {
     ESP_LOGD(TAG, "Invalid state, I'm trying later again");
     newSpeed = speed;
@@ -531,6 +538,10 @@ void ZehnderRF::setSpeed(const uint8_t paramSpeed, const uint8_t paramTimer) {
 void ZehnderRF::discoveryStart(const uint8_t deviceId) {
   RfFrame *const pFrame = (RfFrame *) this->_txFrame;  // frame helper
   nrf905::Config rfConfig;
+
+  if (this->rfState_ != RfStateIdle) {
+    return;  // RF bezig, volgende loop opnieuw proberen
+  }
 
   ESP_LOGD(TAG, "Start discovery with ID %u", deviceId);
 
@@ -556,13 +567,13 @@ void ZehnderRF::discoveryStart(const uint8_t deviceId) {
   this->rf_->updateConfig(&rfConfig, NULL);
   this->rf_->writeTxAddress(NETWORK_LINK_ID, NULL);
 
-  this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
-    ESP_LOGW(TAG, "Start discovery timeout");
-    this->state_ = StateStartDiscovery;
-  });
-
-  // Update state
-  this->state_ = StateDiscoveryWaitForLinkRequest;
+  if (this->startTransmit(this->_txFrame, FAN_TX_RETRIES, [this]() {
+        ESP_LOGW(TAG, "Start discovery timeout");
+        this->state_ = StateStartDiscovery;
+      }) == ResultOk) {
+    // Update state
+    this->state_ = StateDiscoveryWaitForLinkRequest;
+  }
 }
 
 Result ZehnderRF::startTransmit(const uint8_t *const pData, const int8_t rxRetries,

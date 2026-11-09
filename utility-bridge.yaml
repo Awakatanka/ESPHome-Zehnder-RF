@@ -3,41 +3,36 @@ substitutions:
   upper_devicename: Ventilatie
 
 esphome:
-  name: ventilatie
+  name: ${devicename}
   comment: Ventilatie aansturing
 
 esp32:
   board: esp32doit-devkit-v1
   framework:
-    type: arduino
+    type: arduino   # de component is gebouwd/getest met Arduino; niet wijzigen zonder te testen
 
-# Enable logging
+# Zet op DEBUG alleen tijdens het zoeken naar problemen
 logger:
-  level: DEBUG
+  level: INFO
 
-# Enable Home Assistant API
 api:
   encryption:
     key: !secret api_encryption_ventilatie
- 
+
 ota:
   - platform: esphome
     password: !secret ventilatie_ota_password
 
-
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  power_save_mode: none  
+  power_save_mode: none
   manual_ip:
-    # Set this to the IP of the ESP
+    # Vul hier je eigen vaste IP-adres in (192.168.1.x is een voorbeeld!)
     static_ip: 192.168.1.x
-    # Set this to the IP address of the router. Often ends with .1
     gateway: 192.168.1.1
-    # The subnet of the network. 255.255.255.0 works for most home networks.
-    subnet: 255.255.255.0  
+    subnet: 255.255.255.0
 
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "ventilatie Fallback"
     password: !secret ventilatie_ap_password
@@ -49,43 +44,48 @@ time:
     id: homeassistant_time
     timezone: Europe/Amsterdam
 
-# Load external components
 # https://esphome.io/components/external_components.html#external-components-git
+# Tip: zet bij 'ref' een tag of commit-hash zodra het werkt, zodat een latere wijziging niets breekt.
 external_components:
-  - source: github://Awakatanka/ESPHome-Zehnder-RF
+  - source:
+      type: git
+      url: https://github.com/Awakatanka/ESPHome-Zehnder-RF
+      ref: main
+    refresh: 1d
+  # Lokaal testen vanuit deze map (haal het blok hierboven dan weg):
+  # - source:
+  #     type: local
+  #     path: components
 
-# ---------- SPI (VSPI - VEILIG) ----------
+# ---------- SPI (VSPI) ----------
 spi:
-  clk_pin: GPIO18   # CLK or SCK
+  clk_pin: GPIO18   # SCK
   mosi_pin: GPIO23
   miso_pin: GPIO19
-  #interface: hardware
 
-# ---------- NRF905 ----------
+# ---------- nRF905 ----------
 nrf905:
   id: nrf905_rf
-  cs_pin: GPIO17    #CS or CSN
-  cd_pin: GPIO33   
+  cs_pin: GPIO17    # CSN
+  cd_pin: GPIO33
   ce_pin: GPIO27
   pwr_pin: GPIO26
-  txen_pin: GPIO25   #TX_EN
-# ----------- Use the GND near 3V3 our GND near GPIO23/18 pins ----------
-  # We don't need AM and DR at the moment as they are read from the inernal registers
-  # am_pin: GPIO32
-  # dr_pin: GPIO35
-  
+  txen_pin: GPIO25  # TX_EN
+  # Gebruik de GND naast 3V3 of de GND bij GPIO23/18.
+  # am_pin en dr_pin zijn niet nodig; de status wordt via SPI uitgelezen.
+
 # ---------- ZEHNDER FAN ----------
 fan:
   - platform: zehnder
     id: zehnder_fan
     name: "Ventilatie"
     nrf905: nrf905_rf
-    update_interval: 60s   
+    update_interval: 60s
     setup_priority: -100
 
-# ------------ Button -------------
-# ---- zehnder_fan->setSpeed(3, 10) 3=speed and 10 is time ------
-
+# ---------- Knoppen ----------
+# De knoppen gebruiken fan.turn_on, zodat de status in Home Assistant meeloopt
+# en de opdracht in de wachtrij komt als de radio net bezig is.
 button:
   - platform: restart
     id: ${devicename}_esphome_restart
@@ -95,26 +95,28 @@ button:
     id: ${devicename}_low
     name: ${upper_devicename} Low
     on_press:
-      then:
-        lambda: |-
-          zehnder_fan->setSpeed(1, 0);
-          
+      - fan.turn_on:
+          id: zehnder_fan
+          speed: 1
+
   - platform: template
     id: ${devicename}_medium
     name: ${upper_devicename} Medium
     on_press:
-      then:
-        lambda: |-
-          zehnder_fan->setSpeed(2, 0);
+      - fan.turn_on:
+          id: zehnder_fan
+          speed: 2
 
   - platform: template
     id: ${devicename}_high
     name: ${upper_devicename} High
     on_press:
-      then:
-        lambda: |-
-          zehnder_fan->setSpeed(3, 0);
-  
+      - fan.turn_on:
+          id: zehnder_fan
+          speed: 3
+
+  # LET OP: wist ook de opgeslagen koppeling met de Zehnder.
+  # Zet de Zehnder daarna 10 s spanningsloos en herstart de ESP om opnieuw te koppelen.
   - platform: factory_reset
     id: ${devicename}_reset_pairing
     name: ${upper_devicename} Reset & Pair
